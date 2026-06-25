@@ -1,0 +1,25 @@
+# Зависимости
+vendor/
+node_modules/
+
+# БД и логи
+storage/database/*.sqlite
+storage/logs/*.log
+storage/cache/*
+!storage/**/.gitkeep
+
+# Системные файлы
+.env
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Бэкапы
+*.bak
+*.backup
+*.tar.gz
