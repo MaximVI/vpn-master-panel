@@ -46,6 +46,7 @@ class Database
     
     public function initTables(): void
     {
+        // Основные таблицы
         $this->pdo->exec("
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +55,8 @@ class Database
                 name TEXT,
                 role TEXT DEFAULT 'admin',
                 last_login DATETIME,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             
             CREATE TABLE IF NOT EXISTS servers (
@@ -66,7 +68,9 @@ class Database
                 auth_type TEXT DEFAULT 'password',
                 auth_value TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                last_check DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             
             CREATE TABLE IF NOT EXISTS clients (
@@ -77,14 +81,70 @@ class Database
                 private_key TEXT NOT NULL,
                 ip_address TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
+                traffic_used INTEGER DEFAULT 0,
+                traffic_limit INTEGER DEFAULT 0,
+                last_handshake DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
             );
             
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
-                value TEXT
+                value TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+            
+            -- НОВЫЕ ТАБЛИЦЫ ДЛЯ СТАТИСТИКИ
+            
+            CREATE TABLE IF NOT EXISTS traffic_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER NOT NULL,
+                bytes_received INTEGER DEFAULT 0,
+                bytes_sent INTEGER DEFAULT 0,
+                total_bytes INTEGER DEFAULT 0,
+                recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS connection_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER,
+                server_id INTEGER,
+                event_type TEXT CHECK(event_type IN ('connect', 'disconnect', 'handshake', 'error')),
+                ip_address TEXT,
+                details TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+                FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT NOT NULL,
+                description TEXT,
+                ip_address TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT CHECK(type IN ('info', 'warning', 'error', 'success')),
+                title TEXT NOT NULL,
+                message TEXT,
+                is_read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            -- Индексы для быстрых запросов
+            CREATE INDEX IF NOT EXISTS idx_traffic_client ON traffic_logs(client_id, recorded_at);
+            CREATE INDEX IF NOT EXISTS idx_traffic_date ON traffic_logs(recorded_at);
+            CREATE INDEX IF NOT EXISTS idx_connections_client ON connection_logs(client_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_connections_server ON connection_logs(server_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_log(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(is_read, created_at);
         ");
         
         // Создаём админа по умолчанию
@@ -98,7 +158,7 @@ class Database
             
             $this->pdo->prepare(
                 "INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)"
-            )->execute(['admin@vpn.local', $password, 'Admin', 'admin']);
+            )->execute(['admin@vpn.local', $password, 'Administrator', 'admin']);
         }
     }
     
@@ -118,6 +178,11 @@ class Database
     {
         $result = $this->query($sql, $params)->fetch();
         return $result ?: null;
+    }
+    
+    public function fetchColumn(string $sql, array $params = [], int $column = 0)
+    {
+        return $this->query($sql, $params)->fetchColumn($column);
     }
     
     public function insert(string $table, array $data): int
@@ -146,5 +211,20 @@ class Database
         $whereCond = implode(' = ? AND ', array_keys($where)) . ' = ?';
         $sql = "DELETE FROM $table WHERE $whereCond";
         return $this->query($sql, array_values($where))->rowCount();
+    }
+    
+    public function beginTransaction(): bool
+    {
+        return $this->pdo->beginTransaction();
+    }
+    
+    public function commit(): bool
+    {
+        return $this->pdo->commit();
+    }
+    
+    public function rollback(): bool
+    {
+        return $this->pdo->rollBack();
     }
 }

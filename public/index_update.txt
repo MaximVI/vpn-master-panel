@@ -1,0 +1,7 @@
+// === ГЛАВНАЯ СТРАНИЦА (ДАШБОРД) ===
+$controller = new ServerController();
+$servers = $controller->index();
+$currentPage = 'dashboard';
+
+// Подключаем дашборд
+require __DIR__ . '/dashboard.php';
