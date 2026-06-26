@@ -161,7 +161,7 @@
         async function deleteClient(id) {
             if (!confirm('Удалить клиента?')) return;
             // Заглушка — добавим API позже
-            alert('Удаление будет добавлено позже');
+            location.reload();
         }
     </script>
 </body>
